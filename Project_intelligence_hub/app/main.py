@@ -1,9 +1,9 @@
 # Project_intelligence_hub/app/main.py
-from fastapi import FastAPI
 import logging
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.lessons_router import router as lessons_router
 from app.api.chat_router import router as chat_router
+from app.api.lessons_router import router as lessons_router
 
 logging.basicConfig(level=logging.INFO)
 

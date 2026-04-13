@@ -5,8 +5,8 @@ import sys, os, logging, time, math
 from pinecone import Pinecone, ServerlessSpec
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.config import settings
-from llama_index.core import Document, VectorStoreIndex, StorageContext
 from llama_index.vector_stores.pinecone import PineconeVectorStore
+from llama_index.core import Document, VectorStoreIndex, StorageContext
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,17 +16,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def process_single_excel_file(file_path: str) -> List[Document]:
-    logger.info(f"Processing file: {os.path.basename(file_path)}")
+    logger.info(f"📄 Processing file: {os.path.basename(file_path)}")
     documents =[]
     
     try:
-        # sheet_name=None reads ALL sheets into a Dictionary: {'Sheet1': df1, 'Sheet2': df2}
         all_sheets = pd.read_excel(file_path, sheet_name=None)
         
         for sheet_name, df in all_sheets.items():
             logger.info(f"   -> Reading sheet: {sheet_name} ({len(df)} rows)")
             
-            # Drop rows that are completely empty (all NaNs)
             df = df.dropna(how='all')
             
             for index, row in df.iterrows():
@@ -40,7 +38,7 @@ def process_single_excel_file(file_path: str) -> List[Document]:
                         clean_val = str(value).strip()
                         row_text_parts.append(f"{clean_col}: {clean_val}")
                     
-                    # If the row had no usable text, skip it
+                    # If the row had no usable text, skips
                     if not row_text_parts:
                         continue
                         
@@ -80,8 +78,10 @@ def get_pinecone_storage_context():
             metric="cosine",
             spec=ServerlessSpec(cloud="aws", region=settings.PINECONE_ENV)
         )
+        
         while not pc.describe_index(index_name).status['ready']:
             time.sleep(2)
+        
         logger.info(f"Index '{index_name}' created successfully!")
     
     pinecone_index = pc.Index(index_name)
@@ -97,7 +97,7 @@ def get_pinecone_storage_context():
 def batch_upload_documents(documents: List[Document], storage_context: StorageContext):
     if not documents:
         return
-        
+    
     logger.info(f"Uploading batch of {len(documents)} documents to Pinecone...")
     try:
         VectorStoreIndex.from_documents(
@@ -114,7 +114,7 @@ def run_bulk_ingestion(directory_path: str):
     if not os.path.exists(directory_path):
         logger.error(f"Directory not found: {directory_path}")
         sys.exit(1)
-        
+    
     excel_files =[f for f in os.listdir(directory_path) if f.endswith(('.xlsx', '.xls', '.csv'))]
     
     if not excel_files:
@@ -127,14 +127,8 @@ def run_bulk_ingestion(directory_path: str):
     
     for file_name in excel_files:
         full_path = os.path.join(directory_path, file_name)
-        
-        # Parse the file into Documents
         docs = process_single_excel_file(full_path)
-        
-        # Upload to Pinecone immediately
         batch_upload_documents(docs, storage_context)
-        
-        # Optional: sleep for a second to respect OpenAI rate limits
         time.sleep(1)
     
     logger.info("Bulk ingestion complete!")
