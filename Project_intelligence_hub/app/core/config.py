@@ -16,8 +16,11 @@ class Settings(BaseSettings):
     PINECONE_INDEX_NAME: str
     
     PROJECTS_WITH_RAIDD_API: str
+    SINGLE_PROJECT_API: str
     AI_DETECTION_API: str
     ALL_EMAILS_API: str
+    
+    REDIS_URL: str = "redis://localhost:6379/0"
     
     model_config = SettingsConfigDict(extra="ignore")
 

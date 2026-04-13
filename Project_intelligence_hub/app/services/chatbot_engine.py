@@ -1,12 +1,11 @@
 # Project_intelligence_hub/app/services/chatbot_engine.py
 import logging
-from llama_index.llms.openai import OpenAI
-from llama_index.core.agent import ReActAgent
 from llama_index.core.tools import FunctionTool
-from llama_index.core.llms import ChatMessage as LlamaChatMessage, MessageRole
+from llama_index.llms.openai import OpenAI
+from llama_index.storage.chat_store.redis import RedisChatStore
+from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.agent.openai import OpenAIAgent
 from app.core.config import settings
-from app.tools.api_tools import fetch_live_project_data
-from app.tools.vector_tools import search_project_documents
 from app.tools.vector_tools import search_project_documents, search_corporate_knowledge
 from app.tools.api_tools import fetch_live_project_data, fetch_all_emails, fetch_ai_detections
 
@@ -37,7 +36,6 @@ detection_tool = FunctionTool.from_defaults(
     description="Use this tool to see previous AI detection logs, RAIDD analysis from emails, and task updates."
 )
 
-# Define the System Persona 
 SYSTEM_PROMPT = """
 You are the PMO Intelligence Assistant. You are an expert in project management.
 You have access to a suite of tools:
@@ -51,35 +49,39 @@ Always cite your sources, e.g., "According to the contract (Source: vendor_sow.p
 If you cannot find an answer in the tools, state that you don't have that information.
 """
 
-def generate_chat_response(message: str, chat_history: list, project_id: str = None) -> dict:
-    logger.info("Initializing ReAct Agentic Chatbot...")
+try:
+    chat_store = RedisChatStore(redis_url=settings.REDIS_URL)
+    logger.info("Redis Chat Store initialized successfully.")
+except Exception as e:
+    logger.error(f"Failed to connect to Redis: {e}")
+    chat_store = None 
+
+def generate_chat_response(message: str, session_id: str, project_id: str = None) -> dict:
+    logger.info(f"Initializing ReAct Agentic Chatbot for Session: {session_id}...")
     
     llm = OpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
     
-    # Convert frontend history to LlamaIndex history
-    llama_history =[
-        LlamaChatMessage(
-            role=MessageRole.USER if msg.role == "user" else MessageRole.ASSISTANT,
-            content=msg.content
-        ) for msg in chat_history
-    ]
-    
-    # Pre-inject context if a project_id is provided
     context_msg = ""
     if project_id:
         context_msg = f" (Context: The user is currently viewing Project ID: {project_id})"
     
-    agent = ReActAgent.from_tools(
+    memory = ChatMemoryBuffer.from_defaults(
+        token_limit=3000,
+        chat_store=chat_store,
+        chat_store_key=session_id 
+    )
+    
+    agent = OpenAIAgent.from_tools(
         tools=[doc_search_tool, corporate_knowledge_tool, live_api_tool, email_tool, detection_tool],
         llm=llm,
-        chat_history=llama_history,
+        memory=memory,  
         system_prompt=SYSTEM_PROMPT,
         verbose=True
     )
     
     response = agent.chat(message + context_msg)
     
-    sources = ["Agent Tools"] if len(response.sources) > 0 else []
+    sources = ["Agent Tools"] if len(response.sources) > 0 else[]
     
     return {
         "reply": str(response),

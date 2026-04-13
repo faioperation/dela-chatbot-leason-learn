@@ -1,8 +1,8 @@
 # Project_intelligence_hub/app/api/lessons_router.py
 import logging
 from fastapi import APIRouter, HTTPException
-from app.services.lessons_engine import generate_lessons_learned
 from app.schemas.lessons_schemas import LessonsRequest, LessonsLearnedResponse
+from app.services.lessons_engine import generate_lessons_learned
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/insights", tags=["Predictive Insights"])

@@ -11,7 +11,6 @@ from app.core.config import settings
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-
 TRACKER_FILE = os.path.join(os.path.dirname(__file__), "ingested_files_tracker.json")
 
 def load_tracker() -> dict:
@@ -25,6 +24,7 @@ def save_tracker(data: dict):
         json.dump(data, f, indent=4)
 
 def get_pinecone_storage_context():
+    """Initializes Pinecone and returns the LlamaIndex storage context safely."""
     logger.info("Connecting to Pinecone...")
     pc = Pinecone(api_key=settings.PINECONE_API_KEY)
     index_name = settings.PINECONE_INDEX_NAME

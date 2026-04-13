@@ -1,18 +1,18 @@
 # Project_intelligence_hub/app/schemas/lessons_schemas.py
-from typing import List
 from pydantic import BaseModel, Field
+from typing import List
 
 # REQUEST SCHEMA 
 class LessonsRequest(BaseModel):
-    project_id: str             = Field(..., description="The UUID of the live project to analyze")
+    project_id: str = Field(..., description="The UUID of the live project to analyze")
 
-# RESPONSE SCHEMAS
+# RESPONSE SCHEMAS 
 class HistoricalInsight(BaseModel):
-    relevance: str              = Field(..., description="'High', 'Medium', or 'Low'")
-    historical_lesson: str      = Field(..., description="The lesson extracted from past projects")
-    source_project_type: str    = Field(..., description="The industry or type of the past project")
+    relevance: str = Field(..., description="'High', 'Medium', or 'Low'")
+    historical_lesson: str = Field(..., description="The lesson extracted from past projects")
+    source_project_type: str = Field(..., description="The industry or type of the past project")
     recommendation_for_current_project: str = Field(..., description="Actionable advice for the current project")
-    source_evidence: str        = Field(..., description="The name of the file or project this lesson was pulled from.")
+    source_evidence: str = Field(..., description="The name of the file or project this lesson was pulled from.")
 
 class LessonsLearnedResponse(BaseModel):
     project_id: str
