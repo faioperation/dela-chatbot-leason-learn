@@ -20,13 +20,16 @@ except Exception as e:
     GLOBAL_PINECONE_INDEX = None
 
 def generate_lessons_learned(project_id: str) -> LessonsLearnedResponse:
-    # Fetch Live Project Data
     live_data = fetch_live_project_data(project_id)
+    
     if not live_data:
         raise ValueError(f"Could not retrieve data for project {project_id}")
     
-    proj = live_data.get("project", {})
-    raidd_obj = live_data.get("raidd", {})
+    proj = live_data.get("project") or {}
+    raidd_obj = live_data.get("raidd") or {}
+    
+    if not proj and "name" in live_data:
+        proj = live_data
     
     project_name = proj.get("name", "Unknown Project")
     project_desc = proj.get("description", "")
