@@ -16,7 +16,6 @@ except Exception as e:
     GLOBAL_PINECONE_INDEX = None
 
 def _perform_pinecone_search(query: str, namespace: str, top_k: int = 4) -> str:
-    """Helper function to keep code DRY."""
     if not GLOBAL_PINECONE_INDEX:
         return "Error: Database connection not initialized."
         
@@ -51,3 +50,7 @@ def search_project_documents(query: str) -> str:
 def search_corporate_knowledge(query: str) -> str:
     logger.info(f"Tool called: search_corporate_knowledge | Query: {query}")
     return _perform_pinecone_search(query, namespace="corporate_knowledge")
+
+def search_email_templates(query: str) -> str:
+    logger.info(f"Tool called: search_email_templates | Query: {query}")
+    return _perform_pinecone_search(query, namespace="email_templates", top_k=5)

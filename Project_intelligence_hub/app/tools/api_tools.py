@@ -1,5 +1,6 @@
 # Project_intelligence_hub/app/tools/api_tools.py
 import requests, logging, json, redis
+from cachetools import cached, TTLCache
 from typing import Dict, Optional, List, Any
 from app.core.config import settings
 
@@ -16,13 +17,12 @@ def fetch_from_cache_or_api(cache_key: str, api_url: str, timeout: int = 15) -> 
         try:
             cached_data = redis_client.get(cache_key)
             if cached_data:
-                logger.info(f"🟢 [REDIS HIT] Loaded {cache_key} instantly.")
+                logger.info(f"[REDIS HIT] Loaded {cache_key} instantly.")
                 return json.loads(cached_data)
         except redis.RedisError as e:
             logger.warning(f"Redis get error for {cache_key}: {e}")
     
-    # Cache Miss - Fetch from API
-    logger.info(f"🌐 [REDIS MISS] Fetching fresh data from {api_url}...")
+    logger.info(f"[REDIS MISS] Fetching fresh data from {api_url}...")
     try:
         response = requests.get(api_url, timeout=timeout)
         response.raise_for_status()
@@ -32,11 +32,10 @@ def fetch_from_cache_or_api(cache_key: str, api_url: str, timeout: int = 15) -> 
         if not data:
             return None
         
-        # Save to Redis (5-minute TTL)
         if redis_client:
             try:
                 redis_client.setex(cache_key, 300, json.dumps(data))
-                logger.info(f"💾 Saved {cache_key} to Redis.")
+                logger.info(f"Saved {cache_key} to Redis.")
             except redis.RedisError as e:
                 logger.warning(f"Redis set error for {cache_key}: {e}")
         
@@ -93,3 +92,17 @@ def fetch_ai_detections() -> List[Dict]:
         api_url=settings.AI_DETECTION_API, 
         timeout=15
     )
+
+user_email_cache = TTLCache(maxsize=100, ttl=300)
+
+@cached(cache=user_email_cache)
+def fetch_user_emails(user_id: str) -> List[Dict]:
+    url = f"{settings.USER_EMAILS_API}{user_id}"
+    logger.info(f"[CACHE MISS] Fetching emails for user {user_id} from {url}...")
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        return response.json().get("data",[])
+    except Exception as e:
+        logger.error(f"Failed to fetch user emails: {e}")
+        return[]
