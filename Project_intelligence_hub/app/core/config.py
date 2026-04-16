@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     PROJECTS_WITH_RAIDD_API: str
     SINGLE_PROJECT_API: str
     AI_DETECTION_API: str
+    USER_EMAILS_API: str
     ALL_EMAILS_API: str
+    ALL_USERS_API: str
     
     REDIS_URL: str = "redis://localhost:6379/0"
     
