@@ -20,47 +20,33 @@ except Exception as e:
     GLOBAL_PINECONE_INDEX = None
 
 def generate_lessons_learned(project_id: str) -> LessonsLearnedResponse:
+    # Fetch Live Project Data
     live_data = fetch_live_project_data(project_id)
-    
     if not live_data:
-        raise ValueError(f"The external backend API returned no data for project ID {project_id}.")
+        raise ValueError(f"Could not retrieve data for project {project_id}")
     
-    try:
-        proj = live_data.get("project") if isinstance(live_data.get("project"), dict) else {}
-        raidd_obj = live_data.get("raidd") if isinstance(live_data.get("raidd"), dict) else {}
-        
-        if not proj and isinstance(live_data, dict) and "name" in live_data:
-            proj = live_data
-        
-        project_name = proj.get("name") or "Unknown Project"
-        project_desc = proj.get("description") or "No description provided."
-        current_phase = proj.get("status") or "Unknown Phase" 
-        
-        meetings = proj.get("meetings")
-        meeting_summaries =[]
-        if isinstance(meetings, list):
-            for m in meetings:
-                if isinstance(m, dict) and m.get("lastMeetingSummary"):
-                    meeting_summaries.append(m.get("lastMeetingSummary"))
-        
-        ai_summary = proj.get('projectAiSummary')
-        if not isinstance(ai_summary, list):
-            ai_summary =[]
-            
-        dynamic_context = (
-            f"Project Name: {project_name}\n"
-            f"Description: {project_desc}\n"
-            f"Status: {current_phase}\n"
-            f"Progress: {proj.get('projectProgress', '0%')}\n"
-            f"Backend AI Summary: {json.dumps(ai_summary)}\n"
-            f"Recent Meeting Notes: {json.dumps(meeting_summaries)}\n"
-            f"Current RAIDD Flag: {raidd_obj.get('type', 'Unknown')} - {raidd_obj.get('description', 'None')}"
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to parse data from external API: {e}", exc_info=True)
-        raise ValueError(f"Malformed data received from the main backend API. Details: {e}")
+    proj = live_data.get("project", {})
+    raidd_obj = live_data.get("raidd", {})
     
+    project_name = proj.get("name", "Unknown Project")
+    project_desc = proj.get("description", "")
+    
+    current_phase = proj.get("status", "Unknown Phase") 
+    
+    meetings = proj.get("meetings", [])
+    meeting_summaries =[m.get("lastMeetingSummary") for m in meetings if m.get("lastMeetingSummary")]
+    
+    dynamic_context = (
+        f"Project Name: {project_name}\n"
+        f"Description: {project_desc}\n"
+        f"Status: {current_phase}\n"
+        f"Progress: {proj.get('projectProgress', '0%')}\n"
+        f"Backend AI Summary: {json.dumps(proj.get('projectAiSummary',[]))}\n"
+        f"Recent Meeting Notes: {json.dumps(meeting_summaries)}\n"
+        f"Current RAIDD Flag: {raidd_obj.get('type')} - {raidd_obj.get('description', 'None')}"
+    )
+    
+    # Retrieve Historical Lessons from Pinecone using Global Index
     logger.info("Querying Pinecone for historical lessons...")
     if not GLOBAL_PINECONE_INDEX:
         raise ValueError("Pinecone index not initialized.")
@@ -69,11 +55,13 @@ def generate_lessons_learned(project_id: str) -> LessonsLearnedResponse:
     index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
     
     retriever = index.as_retriever(similarity_top_k=5)
-    query_str = f"Lessons learned, risks, and recommendations for projects involving: {project_desc}"
+    
+    query_str = f"Lessons learned, risks, and recommendations for projects involving: {project_desc} or facing issues like {raidd_obj.get('description', '')}"
     retrieved_nodes = retriever.retrieve(query_str)
     
+    # Exposing the metadata for citations!
     historical_context = "\n\n".join([
-        f"[Source: {(n.metadata or {}).get('source_file', 'Unknown')} - Row {(n.metadata or {}).get('row_index', 'N/A')}]\n{n.get_text()}" 
+        f"[Source: {n.metadata.get('source_file', 'Unknown')} - Row {n.metadata.get('row_index', 'N/A')}]\n{n.get_text()}" 
         for n in retrieved_nodes
     ])
     
