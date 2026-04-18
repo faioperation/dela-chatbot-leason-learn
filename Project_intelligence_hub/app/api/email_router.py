@@ -2,10 +2,11 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends
 from app.services.email_writer_engine import draft_email_reply
+from app.api.dependencies import verify_backend
 from app.schemas.email_schemas import DraftReplyRequest, DraftReplyResponse
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/emails", tags=["Auto-Responder"])
+router = APIRouter(prefix="/emails", tags=["Auto-Responder"], dependencies=[Depends(verify_backend)])
 
 @router.post("/draft-reply", response_model=DraftReplyResponse)
 def api_draft_reply(request: DraftReplyRequest):

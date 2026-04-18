@@ -23,8 +23,10 @@ def fetch_from_cache_or_api(cache_key: str, api_url: str, timeout: int = 15) -> 
             logger.warning(f"Redis get error for {cache_key}: {e}")
     
     logger.info(f"[REDIS MISS] Fetching fresh data from {api_url}...")
+    
     try:
-        response = requests.get(api_url, timeout=timeout)
+        headers = {"x-backend-service": settings.BACKEND_API_TOKEN}
+        response = requests.get(api_url, timeout=timeout, headers=headers)
         response.raise_for_status()
         
         data = response.json().get("data")
@@ -54,7 +56,6 @@ def fetch_live_project_data(project_id: str) -> Optional[Dict]:
     primary_data = fetch_from_cache_or_api(cache_key=primary_cache_key, api_url=primary_url, timeout=10)
     
     if primary_data:
-        # Handle backend array-wrapping variations gracefully
         if isinstance(primary_data, list) and len(primary_data) > 0:
             logger.info(f"Extracted Project {project_id} from Primary API.")
             return primary_data[0]
@@ -100,7 +101,8 @@ def fetch_user_emails(user_id: str) -> List[Dict]:
     url = f"{settings.USER_EMAILS_API}{user_id}"
     logger.info(f"[CACHE MISS] Fetching emails for user {user_id} from {url}...")
     try:
-        response = requests.get(url, timeout=10)
+        headers = {"x-backend-service": settings.BACKEND_API_TOKEN}
+        response = requests.get(url, timeout=10, headers=headers)
         response.raise_for_status()
         return response.json().get("data",[])
     except Exception as e:

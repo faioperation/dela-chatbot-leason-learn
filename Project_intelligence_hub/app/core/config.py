@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     USER_EMAILS_API: str
     ALL_EMAILS_API: str
     ALL_USERS_API: str
+    BACKEND_API_TOKEN: str
     
     REDIS_URL: str = "redis://localhost:6379/0"
     
