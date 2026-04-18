@@ -6,7 +6,7 @@ from llama_index.storage.chat_store.redis import RedisChatStore
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.agent.openai import OpenAIAgent
 from app.core.config import settings
-from app.tools.vector_tools import search_project_documents, search_corporate_knowledge
+from app.tools.vector_tools import search_project_documents, search_corporate_knowledge, get_dynamic_session_tool
 from app.tools.api_tools import fetch_live_project_data, fetch_all_emails, fetch_ai_detections
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,18 @@ def generate_chat_response(message: str, session_id: str, project_id: str = None
     
     context_msg = ""
     if project_id:
-        context_msg = f" (Context: The user is currently viewing Project ID: {project_id})"
+        project_name = "Unknown Project"
+        
+        live_data = fetch_live_project_data(project_id)
+        if live_data:
+            project_name = live_data.get("project", {}).get("name", "Unknown Project")
+        
+        context_msg = (
+            f"\n(SYSTEM CONTEXT: The user is currently viewing the project named '{project_name}'. "
+            f"Its system ID is {project_id}. "
+            f"CRITICAL INSTRUCTION: ALWAYS refer to the project by its name ('{project_name}'). "
+            f"NEVER display or mention the raw UUID '{project_id}' in your replies to the user.)"
+        )
     
     memory = ChatMemoryBuffer.from_defaults(
         token_limit=3000,
@@ -71,8 +82,10 @@ def generate_chat_response(message: str, session_id: str, project_id: str = None
         chat_store_key=session_id 
     )
     
+    session_doc_tool = get_dynamic_session_tool(session_id)
+    
     agent = OpenAIAgent.from_tools(
-        tools=[doc_search_tool, corporate_knowledge_tool, live_api_tool, email_tool, detection_tool],
+        tools=[doc_search_tool, corporate_knowledge_tool, live_api_tool, email_tool, detection_tool, session_doc_tool],
         llm=llm,
         memory=memory,  
         system_prompt=SYSTEM_PROMPT,
