@@ -3,6 +3,7 @@ import logging
 from pinecone import Pinecone
 from llama_index.core import VectorStoreIndex
 from llama_index.vector_stores.pinecone import PineconeVectorStore
+from llama_index.core.vector_stores.types import MetadataFilters, ExactMatchFilter
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -54,3 +55,38 @@ def search_corporate_knowledge(query: str) -> str:
 def search_email_templates(query: str) -> str:
     logger.info(f"Tool called: search_email_templates | Query: {query}")
     return _perform_pinecone_search(query, namespace="email_templates", top_k=5)
+
+def get_dynamic_session_tool(session_id: str):
+    """
+    Creates a temporary tool scoped ONLY to this user's session.
+    Prevents User A from reading User B's documents.
+    """
+    def search_my_uploaded_documents(query: str) -> str:
+        """Searches documents that the user manually uploaded during this chat session."""
+        logger.info(f"Tool called: search_my_uploaded_documents | Session: {session_id}")
+        try:
+            vector_store = PineconeVectorStore(pinecone_index=GLOBAL_PINECONE_INDEX, namespace="session_uploads")
+            index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
+            
+            # 🔥 SECURITY: Filter strictly by session_id
+            filters = MetadataFilters(
+                filters=[ExactMatchFilter(key="session_id", value=session_id)]
+            )
+            
+            retriever = index.as_retriever(similarity_top_k=4, filters=filters)
+            nodes = retriever.retrieve(query)
+            
+            if not nodes:
+                return "No relevant information found in your uploaded documents."
+                
+            results = [f"[Source: Uploaded Document]\n{n.get_text()}" for n in nodes]
+            return "\n\n".join(results)
+        except Exception as e:
+            logger.error(f"Session vector search failed: {e}")
+            return "Error: Could not search uploaded documents."
+    
+    from llama_index.core.tools import FunctionTool
+    return FunctionTool.from_defaults(
+        fn=search_my_uploaded_documents,
+        description="Use this tool ONLY when the user asks questions about a document, PDF, or file they just uploaded."
+    )
