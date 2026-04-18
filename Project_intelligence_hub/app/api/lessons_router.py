@@ -1,11 +1,12 @@
 # Project_intelligence_hub/app/api/lessons_router.py
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.api.dependencies import verify_backend
 from app.schemas.lessons_schemas import LessonsRequest, LessonsLearnedResponse
 from app.services.lessons_engine import generate_lessons_learned
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/insights", tags=["Predictive Insights"])
+router = APIRouter(prefix="/insights", tags=["Predictive Insights"], dependencies=[Depends(verify_backend)])
 
 @router.post("/lessons-learned", response_model=LessonsLearnedResponse)
 def get_lessons_learned(request: LessonsRequest):
