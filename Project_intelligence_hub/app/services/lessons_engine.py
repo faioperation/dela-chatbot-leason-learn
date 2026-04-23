@@ -25,25 +25,31 @@ def generate_lessons_learned(project_id: str) -> LessonsLearnedResponse:
     if not live_data:
         raise ValueError(f"Could not retrieve data for project {project_id}")
     
-    proj = live_data.get("project", {})
-    raidd_obj = live_data.get("raidd", {})
+    # SAFETY FIX: Using 'or {}' ensures that if the API returns null/None, 
+    # the code gets an empty dictionary instead of crashing.
+    proj = live_data.get("project") or {}
+    raidd_obj = live_data.get("raidd") or {}
     
     project_name = proj.get("name", "Unknown Project")
     project_desc = proj.get("description", "")
     
     current_phase = proj.get("status", "Unknown Phase") 
     
-    meetings = proj.get("meetings", [])
-    meeting_summaries =[m.get("lastMeetingSummary") for m in meetings if m.get("lastMeetingSummary")]
+    meetings = proj.get("meetings") or []
+    meeting_summaries = [m.get("lastMeetingSummary") for m in meetings if m.get("lastMeetingSummary")]
     
+    # We use .get() safely on raidd_obj because we ensured it is at least an empty {} above
+    raidd_type = raidd_obj.get('type', 'None')
+    raidd_desc = raidd_obj.get('description', 'No active RAIDD issues reported.')
+
     dynamic_context = (
         f"Project Name: {project_name}\n"
         f"Description: {project_desc}\n"
         f"Status: {current_phase}\n"
         f"Progress: {proj.get('projectProgress', '0%')}\n"
-        f"Backend AI Summary: {json.dumps(proj.get('projectAiSummary',[]))}\n"
+        f"Backend AI Summary: {json.dumps(proj.get('projectAiSummary', []))}\n"
         f"Recent Meeting Notes: {json.dumps(meeting_summaries)}\n"
-        f"Current RAIDD Flag: {raidd_obj.get('type')} - {raidd_obj.get('description', 'None')}"
+        f"Current RAIDD Flag: {raidd_type} - {raidd_desc}"
     )
     
     # Retrieve Historical Lessons from Pinecone using Global Index
@@ -56,10 +62,11 @@ def generate_lessons_learned(project_id: str) -> LessonsLearnedResponse:
     
     retriever = index.as_retriever(similarity_top_k=5)
     
-    query_str = f"Lessons learned, risks, and recommendations for projects involving: {project_desc} or facing issues like {raidd_obj.get('description', '')}"
+    # Searching for historical lessons based on project description and current RAIDD issues
+    query_str = f"Lessons learned, risks, and recommendations for projects involving: {project_desc} or facing issues like {raidd_desc}"
     retrieved_nodes = retriever.retrieve(query_str)
     
-    # Exposing the metadata for citations!
+    # Exposing the metadata for citations
     historical_context = "\n\n".join([
         f"[Source: {n.metadata.get('source_file', 'Unknown')} - Row {n.metadata.get('row_index', 'N/A')}]\n{n.get_text()}" 
         for n in retrieved_nodes
