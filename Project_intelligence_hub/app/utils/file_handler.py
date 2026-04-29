@@ -6,14 +6,24 @@ logger = logging.getLogger(__name__)
 TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp_uploads")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB limit
 
 def download_file_safely(url: str) -> str:
+    """
+    Downloads a file from a URL, validates size and extension.
+    Now supports PDF, DOCX, DOC, TXT, and PPTX.
+    """
     logger.info(f"Downloading file from: {url}")
     
-    # Generate a random filename to prevent clashes
-    file_ext = url.split('.')[-1].lower()
-    if file_ext not in['pdf', 'docx', 'doc', 'txt']:
+    # Extract file extension
+    try:
+        file_ext = url.split('.')[-1].split('?')[0].lower() # Handling URLs with query params
+    except Exception:
+        file_ext = 'pdf'
+
+    # Added 'pptx' to the allowed list alongside current flow
+    if file_ext not in ['pdf', 'docx', 'doc', 'txt', 'pptx']:
+        logger.warning(f"Unsupported file extension '{file_ext}'. Falling back to 'pdf' logic.")
         file_ext = 'pdf' # Fallback
     
     local_filename = f"{uuid.uuid4()}.{file_ext}"
@@ -30,17 +40,22 @@ def download_file_safely(url: str) -> str:
                         downloaded_size += len(chunk)
                         if downloaded_size > MAX_FILE_SIZE_BYTES:
                             f.close()
-                            os.remove(local_filepath) # Cleanup the partial file
+                            if os.path.exists(local_filepath):
+                                os.remove(local_filepath) # Cleanup partial file
                             raise ValueError("The uploaded file exceeds the 5MB limit.")
                         f.write(chunk)
         
+        logger.info(f"Successfully downloaded {file_ext} file to {local_filepath}")
         return local_filepath
+        
     except Exception as e:
         if os.path.exists(local_filepath):
             os.remove(local_filepath)
+        logger.error(f"Download failed: {e}")
         raise e
 
 def cleanup_temp_file(filepath: str):
+    """Deletes the temporary file after processing."""
     if filepath and os.path.exists(filepath):
         try:
             os.remove(filepath)

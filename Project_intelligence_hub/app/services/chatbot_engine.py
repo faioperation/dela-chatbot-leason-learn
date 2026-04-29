@@ -1,102 +1,67 @@
 # Project_intelligence_hub/app/services/chatbot_engine.py
-import logging
-from llama_index.core.tools import FunctionTool
+import logging, json
 from llama_index.llms.openai import OpenAI
-from llama_index.storage.chat_store.redis import RedisChatStore
-from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.agent.openai import OpenAIAgent
+from llama_index.core.memory import ChatMemoryBuffer
 from app.core.config import settings
-from app.tools.vector_tools import search_project_documents, search_corporate_knowledge, get_dynamic_session_tool
-from app.tools.api_tools import fetch_live_project_data, fetch_all_emails, fetch_ai_detections
-
-logger = logging.getLogger(__name__)
-
-doc_search_tool = FunctionTool.from_defaults(
-    fn=search_project_documents,
-    description="Use this tool to search for exact text in uploaded project documents, contracts, PDFs, and meeting notes."
-)
-
-live_api_tool = FunctionTool.from_defaults(
-    fn=fetch_live_project_data,
-    description="Use this tool when the user asks about the CURRENT live status, tasks, health, or milestones of a project. Requires a project_id."
-)
-
-corporate_knowledge_tool = FunctionTool.from_defaults(
-    fn=search_corporate_knowledge,
-    description="Use this tool to search for historical project data, Excel records, KPIs, RAID logs, and past lessons learned."
-)
-
-email_tool = FunctionTool.from_defaults(
-    fn=fetch_all_emails,
-    description="Use this tool to read all system emails. Useful for finding latest communication and sentiment."
-)
-
-detection_tool = FunctionTool.from_defaults(
-    fn=fetch_ai_detections,
-    description="Use this tool to see previous AI detection logs, RAIDD analysis from emails, and task updates."
-)
-
-SYSTEM_PROMPT = """
-You are the PMO Intelligence Assistant. You are an expert in project management.
-You have access to a suite of tools:
-- 'fetch_live_project_data': Use for current project health, RAIDD status, and tasks.
-- 'search_project_documents': Use for contracts, PDFs, and meeting notes.
-- 'search_corporate_knowledge': Use for the 13,000+ historical records and lessons learned.
-- 'fetch_all_emails': Use to see recent email communications.
-- 'fetch_ai_detections': Use to see historical RAIDD detections and identified patterns.
-
-Always cite your sources, e.g., "According to the contract (Source: vendor_sow.pdf)..." or "The latest email suggests..."
-If you cannot find an answer in the tools, state that you don't have that information.
-"""
-
-try:
-    chat_store = RedisChatStore(redis_url=settings.REDIS_URL)
-    logger.info("Redis Chat Store initialized successfully.")
-except Exception as e:
-    logger.error(f"Failed to connect to Redis: {e}")
-    chat_store = None 
+from app.tools.api_tools import fetch_live_project_data
+from app.tools.vector_tools import get_dynamic_session_tool
 
 def generate_chat_response(message: str, session_id: str, project_id: str = None) -> dict:
-    logger.info(f"Initializing ReAct Agentic Chatbot for Session: {session_id}...")
+    llm = OpenAI(model="gpt-4o", api_key=settings.OPENAI_API_KEY)
     
-    llm = OpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
+    # ব্যাকএন্ড থেকে সরাসরি ডাটা ফেচ করা
+    live_data = fetch_live_project_data(project_id) if project_id else None
     
-    context_msg = ""
-    if project_id:
-        project_name = "Unknown Project"
+    # এআই-কে দেওয়ার জন্য ডাটা ফরম্যাট করা
+    if live_data:
+        proj = live_data.get("project", {})
+        v_analysis = live_data.get("vendor_analysis", {})
+        raidd = live_data.get("raidd") or {}
         
-        live_data = fetch_live_project_data(project_id)
-        if live_data:
-            project_name = live_data.get("project", {}).get("name", "Unknown Project")
-        
-        context_msg = (
-            f"\n(SYSTEM CONTEXT: The user is currently viewing the project named '{project_name}'. "
-            f"Its system ID is {project_id}. "
-            f"CRITICAL INSTRUCTION: ALWAYS refer to the project by its name ('{project_name}'). "
-            f"NEVER display or mention the raw UUID '{project_id}' in your replies to the user.)"
+        ground_truth = (
+            f"--- LIVE PROJECT DATA ---\n"
+            f"Project Name: {proj.get('name')}\n"
+            f"Health: {proj.get('projectHealth')}\n"
+            f"Vendor: {proj.get('vendorName') or proj.get('vendor', {}).get('name')}\n"
+            f"Vendor Portfolio: {v_analysis.get('risk_summary', 'No other projects found')}\n"
+            f"Current RAIDD: {raidd.get('description', 'No specific issues logged')}\n"
+            f"AI Flags: {json.dumps(proj.get('projectAiDetails', {}).get('raiddFlags', {}))}\n"
+            f"--------------------------"
         )
+    else:
+        ground_truth = "Attention: No live data could be retrieved from the backend for this project ID."
+
+    # এআই-এর জন্য কঠোর ইনস্ট্রাকশন (System Prompt)
+    SYSTEM_PROMPT = f"""
+    You are the Strategic PMO Intelligence Engine. Today is April 29, 2026.
     
-    memory = ChatMemoryBuffer.from_defaults(
-        token_limit=3000,
-        chat_store=chat_store,
-        chat_store_key=session_id 
-    )
+    YOUR TRUTH SOURCE:
+    {ground_truth}
     
-    session_doc_tool = get_dynamic_session_tool(session_id)
+    YOUR CAPABILITIES:
+    1. Analyze the LIVE DATA above. It is absolute fact.
+    2. Read uploaded PDF, PPTX, DOCX, and TXT files using the provided tool.
+    3. Always link RAIDD issues with the Vendor's performance.
+    
+    If the user asks about the vendor, you MUST use the name and portfolio count from the LIVE DATA above.
+    """
+
+    # মেমরি এবং এজেন্ট সেটআপ
+    memory = ChatMemoryBuffer.from_defaults(token_limit=3000, chat_store_key=session_id)
     
     agent = OpenAIAgent.from_tools(
-        tools=[doc_search_tool, corporate_knowledge_tool, live_api_tool, email_tool, detection_tool, session_doc_tool],
-        llm=llm,
-        memory=memory,  
+        tools=[get_dynamic_session_tool(session_id)], # ফাইল রিডিংয়ের জন্য
+        llm=llm, 
+        memory=memory,
         system_prompt=SYSTEM_PROMPT,
         verbose=True
     )
     
-    response = agent.chat(message + context_msg)
-    
-    sources = ["Agent Tools"] if len(response.sources) > 0 else[]
+    # এআই-কে দিয়ে প্রশ্নটি সলভ করানো
+    response = agent.chat(message)
     
     return {
         "reply": str(response),
-        "sources": sources
+        "sources": ["Live Backend API", "Session Documents"] if live_data else ["Session Documents"]
     }
