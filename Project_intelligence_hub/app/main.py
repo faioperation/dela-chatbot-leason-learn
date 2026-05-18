@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat_router import router as chat_router
 from app.api.lessons_router import router as lessons_router
 from app.api.email_router import router as email_router
+from app.api.project_analysis_router import router as project_analysis_router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,6 +26,7 @@ app.add_middleware(
 app.include_router(lessons_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(email_router, prefix="/api/v1")
+app.include_router(project_analysis_router, prefix="/api/v1")
 
 @app.get("/health")
 def health_check():
