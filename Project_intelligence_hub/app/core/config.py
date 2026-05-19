@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     SINGLE_PROJECT_PATH: str = "/project/with-raidd/chatbot/{id}"
     SOURCE_API_URL: str = ""
     SOURCE_API_TOKEN: str = ""
+    BACKEND_SERVICE_HEADER_NAME: str = "x-backend-service"
+    BACKEND_SERVICE_TOKEN: str
+
+    model_config = SettingsConfigDict(
+        env_file=str(env_path),
+        extra="ignore",
+    )
     
     # Auth Token
     BACKEND_API_TOKEN: str
