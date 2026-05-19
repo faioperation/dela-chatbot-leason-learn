@@ -4,10 +4,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# ১. পাথ ঠিক আছে কিনা নিশ্চিত করা
+# Resolve the project-level .env path.
 env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 
-# ২. .env ফাইল লোড করা
+# Load environment variables from .env.
 load_dotenv(dotenv_path=env_path)
 
 class Settings(BaseSettings):
@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     USER_EMAILS_API: str
     ALL_EMAILS_API: str
     ALL_USERS_API: str
+    SOURCE_API_BASE_URL: str = "https://accustomed-maryalice-bubbleless.ngrok-free.dev/api"
+    GLOBAL_PROJECTS_PATH: str = "/project/all/with-raidd/chatbot"
+    SINGLE_PROJECT_PATH: str = "/project/with-raidd/chatbot/{id}"
+    SOURCE_API_URL: str = ""
+    SOURCE_API_TOKEN: str = ""
     
     # Auth Token
     BACKEND_API_TOKEN: str
@@ -41,10 +46,10 @@ class Settings(BaseSettings):
 
 try:
     settings = Settings()
-    print(f"✅ Configuration loaded successfully.")
-    print(f"📂 Loaded from: {env_path}")
-    print(f"🌐 API URL in use: {settings.PROJECTS_WITH_RAIDD_API}") # এই লাইনটি চেক করুন
+    print("Configuration loaded successfully.")
+    print(f"Loaded from: {env_path}")
+    print(f"API URL in use: {settings.PROJECTS_WITH_RAIDD_API}")
 except Exception as e:
-    print(f"❌ ERROR: Environment validation failed.")
+    print("ERROR: Environment validation failed.")
     print(f"Missing or Invalid Keys: {e}")
     raise e
