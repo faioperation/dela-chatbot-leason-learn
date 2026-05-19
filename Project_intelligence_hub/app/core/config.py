@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     GLOBAL_PROJECTS_PATH: str = "/project/all/with-raidd/chatbot"
     SINGLE_PROJECT_PATH: str = "/project/with-raidd/chatbot/{id}"
     SOURCE_API_URL: str = ""
+    SOURCE_API_TOKEN: str = ""
     
     # Auth Token
     BACKEND_API_TOKEN: str

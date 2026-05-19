@@ -22,7 +22,7 @@ def fetch_from_cache_or_api(cache_key: str, api_url: str, timeout: int = 15) -> 
         except: pass
     
     try:
-        headers = {"x-backend-service": settings.BACKEND_API_TOKEN}
+        headers = {"x-backend-service": settings.SOURCE_API_TOKEN}
         response = requests.get(api_url, timeout=timeout, headers=headers)
         response.raise_for_status()
         data = response.json().get("data")
@@ -38,7 +38,7 @@ def fetch_from_cache_or_api(cache_key: str, api_url: str, timeout: int = 15) -> 
 
 def fetch_live_project_data(project_id: str) -> Optional[Dict]:
     """Fetches project, RAIDD, and vendor portfolio data with robust ID matching."""
-    headers = {"x-backend-service": settings.BACKEND_API_TOKEN}
+    headers = {"x-backend-service": settings.SOURCE_API_TOKEN}
     
     try:
         # 1. Fetch Master List

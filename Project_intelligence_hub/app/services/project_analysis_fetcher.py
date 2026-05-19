@@ -10,13 +10,11 @@ def _headers() -> dict:
 def _url(path: str) -> str:
     if path.startswith("http://") or path.startswith("https://"):
         return path
-
     return f"{settings.SOURCE_API_BASE_URL.rstrip('/')}/{path.lstrip('/')}"
 
 
 async def fetch_projects():
     url = settings.SOURCE_API_URL or _url(settings.GLOBAL_PROJECTS_PATH)
-
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.get(url, headers=_headers())
         response.raise_for_status()
@@ -26,7 +24,6 @@ async def fetch_projects():
 async def fetch_project(project_id: str):
     path = settings.SINGLE_PROJECT_PATH.format(id=project_id)
     url = _url(path)
-
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.get(url, headers=_headers())
         response.raise_for_status()

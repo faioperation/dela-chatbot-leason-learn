@@ -6,8 +6,8 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 async def verify_backend(x_backend_service: str = Header(None)):
+    logger.warning(f"ENV TOKEN: '{settings.BACKEND_API_TOKEN}'")
+    logger.warning(f"RECEIVED:  '{x_backend_service}'")
     if x_backend_service != settings.BACKEND_API_TOKEN:
-        logger.warning(f"Unauthorized access attempt blocked. Provided token: {x_backend_service}")
         raise HTTPException(status_code=401, detail="Unauthorized Backend")
-    
     return True
