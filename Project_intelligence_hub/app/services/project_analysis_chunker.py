@@ -12,6 +12,15 @@ def make_chunk_id(project_id: str, chunk_type: str, item_id: str = "main") -> st
     return f"{safe_value(project_id)}:{chunk_type}:{safe_value(item_id, 'main')}"
 
 
+def get_project(item: Dict[str, Any]) -> Dict[str, Any]:
+    project = item.get("project")
+
+    if isinstance(project, dict):
+        return project
+
+    return item
+
+
 def flatten_json(obj: Any, prefix: str = "") -> List[str]:
     lines = []
 
@@ -47,9 +56,20 @@ def normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {**payload, "data": []}
 
 
-def get_raidd_parts(item: Dict[str, Any]) -> Dict[str, Any]:
-    project = item.get("project", {}) or {}
-    top_raidd = item.get("raidd") or {}
+def get_raidd_items(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raidd = item.get("raidd")
+
+    if isinstance(raidd, list):
+        return [entry for entry in raidd if isinstance(entry, dict)] or [{}]
+
+    if isinstance(raidd, dict):
+        return [raidd]
+
+    return [{}]
+
+
+def get_raidd_parts(item: Dict[str, Any], top_raidd: Dict[str, Any]) -> Dict[str, Any]:
+    project = get_project(item)
     ai_detection = top_raidd.get("aiDetection") or {}
 
     old_ai = project.get("projectAiDetails") or {}
@@ -67,11 +87,12 @@ def get_raidd_parts(item: Dict[str, Any]) -> Dict[str, Any]:
         "assumptions": raidd_data.get("assumptions") or old_flags.get("assumptions") or [],
         "dependencies": raidd_data.get("dependencies") or old_flags.get("dependencies") or [],
         "decisions": raidd_data.get("decisions") or old_flags.get("decisions") or [],
+        "description": top_raidd.get("description"),
         "message": ai_detection.get("raiddMessage") or email.get("raiddMessage") or old_ai.get("summary"),
         "analysis": ai_detection.get("raiddAnalysis") or email.get("raiddAnalysis") or top_raidd.get("type") or [],
         "summary": ai_detection.get("summary") or old_ai.get("summary"),
         "source_type": ai_detection.get("sourceType") or email.get("source") or "unknown",
-        "title": ai_detection.get("title") or email.get("subject") or top_raidd.get("title") or "Untitled",
+        "title": top_raidd.get("title") or ai_detection.get("title") or email.get("subject") or "Untitled",
     }
 
 
@@ -80,7 +101,7 @@ def chunk_full_json_payload(payload: Dict[str, Any], max_lines: int = 40) -> Lis
     chunks = []
 
     for item in payload.get("data", []):
-        project = item.get("project", {}) or {}
+        project = get_project(item)
         project_id = safe_value(project.get("id"))
         project_name = safe_value(project.get("name"), "Unknown Project")
 
@@ -116,14 +137,13 @@ def chunk_project_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     chunks = []
 
     for item in payload.get("data", []):
-        project = item.get("project", {}) or {}
+        project = get_project(item)
         project_id = safe_value(project.get("id"))
         project_name = safe_value(project.get("name"), "Unknown Project")
 
         manager = project.get("manager") or {}
         assign_team = project.get("assignTeam") or {}
         client = project.get("client") or {}
-        raidd_parts = get_raidd_parts(item)
 
         manager_name = f"{manager.get('firstName', '')} {manager.get('lastName', '')}".strip()
 
@@ -165,14 +185,17 @@ Action Points:
             },
         })
 
-        raidd_id = safe_value(raidd_parts["raidd"].get("id"), "main")
-        raidd_text = f"""
+        for raidd_index, top_raidd in enumerate(get_raidd_items(item)):
+            raidd_parts = get_raidd_parts(item, top_raidd)
+            raidd_id = safe_value(top_raidd.get("id"), f"main-{raidd_index}")
+            raidd_text = f"""
 Project Name: {project_name}
 Project ID: {project_id}
 RAIDD ID: {raidd_id}
 RAIDD Type: {json.dumps(raidd_parts["raidd"].get("type") or raidd_parts["analysis"], ensure_ascii=False)}
 RAIDD Status: {raidd_parts["raidd"].get("status")}
 AI Detection Title: {raidd_parts["title"]}
+RAIDD Description: {raidd_parts["description"]}
 AI Detection Summary: {raidd_parts["summary"]}
 AI Detection Source Type: {raidd_parts["source_type"]}
 RAIDD Message: {raidd_parts["message"]}
@@ -199,17 +222,17 @@ Source Email Body:
 {raidd_parts["email"].get("body")}
 """
 
-        chunks.append({
-            "id": make_chunk_id(project_id, "raidd", raidd_id),
-            "text": raidd_text.strip(),
-            "metadata": {
-                "project_id": project_id,
-                "project_name": project_name,
-                "type": "raidd_ai_detection",
-                "raidd_id": raidd_id,
-                "source_type": safe_value(raidd_parts["source_type"]),
-            },
-        })
+            chunks.append({
+                "id": make_chunk_id(project_id, "raidd", raidd_id),
+                "text": raidd_text.strip(),
+                "metadata": {
+                    "project_id": project_id,
+                    "project_name": project_name,
+                    "type": "raidd_ai_detection",
+                    "raidd_id": raidd_id,
+                    "source_type": safe_value(raidd_parts["source_type"]),
+                },
+            })
 
         for task in project.get("tasks", []):
             task_text = f"""

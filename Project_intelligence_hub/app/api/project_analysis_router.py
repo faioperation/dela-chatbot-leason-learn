@@ -1,5 +1,6 @@
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from app.api.dependencies import verify_backend
@@ -15,14 +16,44 @@ router = APIRouter(tags=["Project Analysis Chatbot"], dependencies=[Depends(veri
 Base.metadata.create_all(bind=engine)
 
 
+def _sync_error_response(exc: Exception):
+    if isinstance(exc, httpx.HTTPStatusError):
+        upstream_status = exc.response.status_code
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Project sync failed because the upstream project API returned an error.",
+                "upstream_status": upstream_status,
+                "upstream_url": str(exc.request.url),
+            },
+        ) from exc
+
+    if isinstance(exc, httpx.RequestError):
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Project sync failed because the upstream project API could not be reached.",
+                "upstream_url": str(exc.request.url) if exc.request else None,
+            },
+        ) from exc
+
+    raise exc
+
+
 @router.post("/sync")
 async def sync_global():
-    return await sync_project_knowledge()
+    try:
+        return await sync_project_knowledge()
+    except Exception as exc:
+        _sync_error_response(exc)
 
 
 @router.post("/sync/project/{project_id}")
 async def sync_single_project(project_id: str):
-    return await sync_project_knowledge(project_id=project_id)
+    try:
+        return await sync_project_knowledge(project_id=project_id)
+    except Exception as exc:
+        _sync_error_response(exc)
 
 
 async def _build_chat_request(
