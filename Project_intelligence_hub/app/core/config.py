@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     SOURCE_API_TOKEN: str = ""
     BACKEND_SERVICE_HEADER_NAME: str = "x-backend-service"
     BACKEND_SERVICE_TOKEN: str
+    PROJECT_SYNC_AUTORUN: bool = True
+    PROJECT_SYNC_INTERVAL_SECONDS: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=str(env_path),
