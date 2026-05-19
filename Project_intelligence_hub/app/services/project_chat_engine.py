@@ -15,6 +15,7 @@ from app.services.project_analysis_fetcher import fetch_project, fetch_projects
 from app.services.project_analysis_pinecone import (
     delete_all_vectors,
     delete_project_vectors,
+    search_knowledge_base,
     search_similar,
     upsert_chunks,
 )
@@ -25,8 +26,17 @@ CHAT_MODEL = "gpt-4.1-mini"
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
+def _get_matches(results) -> list:
+    return results.matches if hasattr(results, "matches") else results.get("matches", [])
+
+
+def _get_metadata(match) -> dict:
+    return match.metadata if hasattr(match, "metadata") else match.get("metadata", {})
+
+
 def answer_identity_question(question: str) -> Optional[dict]:
     normalized = " ".join(question.lower().strip().split())
+
     identity_questions = {
         "who is this",
         "what is this",
@@ -40,7 +50,7 @@ def answer_identity_question(question: str) -> Optional[dict]:
             "answer": (
                 "I am a project analysis chatbot. I can help answer questions about synced project data, "
                 "including project status, managers, tasks, meetings, risks, issues, assumptions, dependencies, "
-                "decisions, and RAIDD insights."
+                "decisions, RAIDD insights, and uploaded knowledge-base files."
             ),
             "sources": [],
         }
@@ -53,6 +63,7 @@ async def sync_project_knowledge(project_id: Optional[str] = None):
     payload = normalize_payload(payload)
 
     db = SessionLocal()
+
     try:
         save_project_facts(db, payload)
     finally:
@@ -79,39 +90,81 @@ async def sync_project_knowledge(project_id: Optional[str] = None):
     }
 
 
-def answer_question(question: str, project_id: Optional[str] = None):
+def answer_question(
+    question: str,
+    project_id: Optional[str] = None,
+    knowledge_base_id: Optional[str] = None,
+):
     identity_answer = answer_identity_question(question)
+
     if identity_answer:
         return identity_answer
 
     query_embedding = create_embedding(question)
-    results = search_similar(query_embedding, top_k=12, project_id=project_id)
-    matches = results.matches if hasattr(results, "matches") else results.get("matches", [])
+
+    project_results = search_similar(
+        query_embedding,
+        top_k=12,
+        project_id=project_id,
+    )
+    project_matches = _get_matches(project_results)
+
+    knowledge_results = search_knowledge_base(
+        query_embedding,
+        top_k=8,
+        project_id=project_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    knowledge_matches = _get_matches(knowledge_results)
 
     contexts = []
-    for match in matches:
-        metadata = match.metadata if hasattr(match, "metadata") else match.get("metadata", {})
+
+    for match in project_matches:
+        metadata = _get_metadata(match)
         text = metadata.get("text", "")
+
         if text:
-            contexts.append(text)
+            contexts.append(f"[Synced Project Data]\n{text}")
+
+    for match in knowledge_matches:
+        metadata = _get_metadata(match)
+        text = metadata.get("text", "")
+        source_file = metadata.get("source_file", "Uploaded knowledge file")
+
+        if text:
+            contexts.append(f"[Knowledge Base: {source_file}]\n{text}")
 
     if not contexts:
         return {
-            "answer": "I don't have enough information in the project data to answer that. Please run sync first.",
+            "answer": (
+                "I don't have enough information in the synced project data or uploaded knowledge base to answer that. "
+                "Please run sync first or upload a knowledge-base file."
+            ),
             "sources": [],
         }
 
     context_text = "\n\n---\n\n".join(contexts)
+
     project_rule = (
         f"- Only answer for project_id {project_id}."
         if project_id
-        else "- The context may contain multiple projects. Mention project names when useful."
+        else "- The synced project context may contain multiple projects. Mention project names when useful."
+    )
+
+    knowledge_rule = (
+        f"- The user supplied knowledge_base_id {knowledge_base_id}; use it when the question is about uploaded files."
+        if knowledge_base_id
+        else "- Use uploaded knowledge-base context only when it is relevant to the question."
     )
 
     prompt = f"""
 You are a project data assistant.
 
-Answer the user's question using ONLY the provided JSON context.
+Answer the user's question using ONLY the provided context.
+
+The context can contain two source types:
+1. Synced Project Data: JSON-derived project, RAIDD, task, meeting, risk, issue, dependency, decision, and email data.
+2. Knowledge Base: text extracted from a user-uploaded PDF, DOCX, TXT, or PPTX file.
 
 Rules:
 - If the answer exists in the context, answer clearly.
@@ -123,8 +176,10 @@ Rules:
 - If there are multiple projects, list the project names.
 - If the user asks about RAIDD, risks, assumptions, issues, dependencies, decisions, AI detection, source email, sentiment, tasks, meetings, manager, client, status, URL, or date, search the context carefully.
 {project_rule}
+{knowledge_rule}
 - Do not use outside knowledge.
 - Do not invent information.
+- If project data and knowledge-base data conflict, mention the conflict instead of choosing silently.
 - Keep the answer concise.
 
 Context:
@@ -139,7 +194,7 @@ User question:
         messages=[
             {
                 "role": "system",
-                "content": "You answer questions from synced project JSON data only.",
+                "content": "You answer questions from synced project data and uploaded knowledge-base context only.",
             },
             {
                 "role": "user",
@@ -152,7 +207,18 @@ User question:
     return {
         "answer": response.choices[0].message.content,
         "sources": [
-            match.metadata if hasattr(match, "metadata") else match.get("metadata", {})
-            for match in matches
+            *_get_source_list(project_matches, "project_data"),
+            *_get_source_list(knowledge_matches, "knowledge_base"),
         ],
     }
+
+
+def _get_source_list(matches: list, default_type: str) -> list[dict]:
+    sources = []
+
+    for match in matches:
+        metadata = _get_metadata(match)
+        metadata.setdefault("type", default_type)
+        sources.append(metadata)
+
+    return sources
