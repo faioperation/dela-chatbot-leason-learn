@@ -9,11 +9,20 @@ def normalize(text: str) -> str:
     return text.lower().strip()
 
 
+def get_project(item: dict) -> dict:
+    project = item.get("project")
+
+    if isinstance(project, dict):
+        return project
+
+    return item
+
+
 def save_project_facts(db: Session, payload: dict):
     seen_ids = set()
 
     for item in payload.get("data", []):
-        project = item.get("project", {})
+        project = get_project(item)
         project_id = project.get("id")
         project_name = project.get("name", "")
 
