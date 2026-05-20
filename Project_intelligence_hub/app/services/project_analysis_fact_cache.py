@@ -18,6 +18,37 @@ def get_project(item: dict) -> dict:
     return item
 
 
+def get_first_vendor(project: dict) -> dict:
+    vendor = project.get("vendor")
+
+    if isinstance(vendor, list):
+        return vendor[0] if vendor and isinstance(vendor[0], dict) else {}
+
+    if isinstance(vendor, dict):
+        return vendor
+
+    return {}
+
+
+def format_vendor_answer(project_name: str, project: dict) -> str:
+    vendor = get_first_vendor(project)
+    vendor_name = vendor.get("name") or project.get("vendorName")
+
+    if not vendor_name:
+        return f"No vendor name was found for {project_name}."
+
+    details = [f"The vendor for {project_name} is {vendor_name}."]
+
+    if vendor.get("designation"):
+        details.append(f"Designation: {vendor.get('designation')}.")
+    if vendor.get("email"):
+        details.append(f"Email: {vendor.get('email')}.")
+    if vendor.get("phoneNumber"):
+        details.append(f"Phone: {vendor.get('phoneNumber')}.")
+
+    return " ".join(details)
+
+
 def save_project_facts(db: Session, payload: dict):
     seen_ids = set()
 
@@ -88,7 +119,7 @@ def save_project_facts(db: Session, payload: dict):
                 "question_key": "manager",
                 "answer": f"The manager of {project_name} is {manager_name}. Their role is {manager.get('role')}.",
             },
-            {"fact_type": "vendor", "question_key": "vendor", "answer": f"The vendor for {project_name} is {project.get('vendorName')}."},
+            {"fact_type": "vendor", "question_key": "vendor", "answer": format_vendor_answer(project_name, project)},
             {"fact_type": "team", "question_key": "team", "answer": f"The assigned team for {project_name} is {assign_team.get('name')}."},
             {"fact_type": "owner", "question_key": "owner", "answer": f"The project owner ID for {project_name} is {project.get('projectOwnerId')}."},
             {
@@ -170,7 +201,7 @@ def find_cached_answer(db: Session, question: str):
         ("dependencies", ("depend", "dependency")),
         ("action_points", ("action", "todo", "next step")),
         ("summary", ("summary", "summarize", "note", "detail", "weekly")),
-        ("description", ("what is", "about", "describe")),
+        ("description", ("about", "describe")),
     )
 
     if ("meeting" in q and ("link" in q or "url" in q)) or "meeting link" in q:
@@ -195,6 +226,8 @@ def find_cached_answer(db: Session, question: str):
             .first()
         )
         if fact:
+            if fact.fact_type == "vendor" and " is None." in fact.answer:
+                continue
             answers.append(fact.answer)
 
     if not answers:
