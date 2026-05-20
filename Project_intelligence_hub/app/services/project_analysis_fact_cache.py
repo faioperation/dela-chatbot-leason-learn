@@ -49,6 +49,37 @@ def format_vendor_answer(project_name: str, project: dict) -> str:
     return " ".join(details)
 
 
+def format_owner_answer(project_name: str, project: dict) -> str:
+    owner_id = project.get("projectOwnerId")
+    manager = project.get("manager") or {}
+    manager_name = f"{manager.get('firstName', '')} {manager.get('lastName', '')}".strip()
+
+    if owner_id and owner_id == manager.get("id") and manager_name:
+        role = manager.get("role")
+        answer = f"The project owner of {project_name} is {manager_name}"
+
+        if role:
+            answer += f" ({role})"
+
+        answer += "."
+        return answer
+
+    if manager_name and not owner_id:
+        role = manager.get("role")
+        answer = f"The project owner of {project_name} is {manager_name}"
+
+        if role:
+            answer += f" ({role})"
+
+        answer += "."
+        return answer
+
+    if owner_id:
+        return f"The project owner ID for {project_name} is {owner_id}."
+
+    return f"No project owner was found for {project_name}."
+
+
 def save_project_facts(db: Session, payload: dict):
     seen_ids = set()
 
@@ -121,7 +152,7 @@ def save_project_facts(db: Session, payload: dict):
             },
             {"fact_type": "vendor", "question_key": "vendor", "answer": format_vendor_answer(project_name, project)},
             {"fact_type": "team", "question_key": "team", "answer": f"The assigned team for {project_name} is {assign_team.get('name')}."},
-            {"fact_type": "owner", "question_key": "owner", "answer": f"The project owner ID for {project_name} is {project.get('projectOwnerId')}."},
+            {"fact_type": "owner", "question_key": "owner", "answer": format_owner_answer(project_name, project)},
             {
                 "fact_type": "health",
                 "question_key": "health",
@@ -170,6 +201,10 @@ def save_project_facts(db: Session, payload: dict):
 
 def find_cached_answer(db: Session, question: str):
     q = normalize(question)
+
+    if "report" in q or "owner" in q:
+        return None
+
     project = None
     project_names = [row[0] for row in db.query(ProjectFact.project_name).distinct().all() if row[0]]
 
