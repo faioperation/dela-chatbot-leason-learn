@@ -172,9 +172,19 @@ Rules:
 - The project name is found at project.name.
 - RAIDD data can be found at raidd.aiDetection.raiddData and raidd.aiDetection.email.raiddData.
 - If the user asks "what is the project name", answer from Project Name / project.name only.
+- If the user asks who the project owner is, resolve Project Owner ID/projectOwnerId to the matching person in context when possible. If projectOwnerId matches manager.id/Manager ID, answer with the manager's full name and role, and optionally include the ID only as supporting detail.
+- For any "who is" question about owner, manager, creator, client, contact, assignee, or team, prefer human-readable names, roles, emails, and team names from related objects over raw IDs.
+- Return a raw ID only when no matching human-readable object or name is available in the context.
 - If there is one project in context, give only that project name.
 - If there are multiple projects, list the project names.
 - If the user asks about RAIDD, risks, assumptions, issues, dependencies, decisions, AI detection, source email, sentiment, tasks, meetings, manager, client, status, URL, or date, search the context carefully.
+- For RAIDD count questions, use top-level project raidd records as the canonical count source.
+- Count a RAIDD record as a risk when its RAIDD Type/type array contains "RISK", even if the same record also contains ISSUE, ASSUMPTION, DEPENDENCY, or DECISION.
+- Treat RAIDD Status/status values of null, empty, unknown, OPEN, or IN_PROGRESS as open/unresolved. Treat only explicit closed states such as CLOSED, RESOLVED, DONE, CANCELLED, or DELETED as not open.
+- Do not count nested aiDetection.raiddData/projectRisks/email projectRisks as additional separate risks when they belong to a top-level RAIDD record; use them only to describe the risk details.
+- If the user asks for a report, status report, full status report, project report, or summary report, format the answer as a structured Markdown report instead of a long paragraph.
+- For report-style answers, use these sections when the information is available: Executive Summary, Project Overview, Timeline, Health and Progress, Client, Project Manager, Team, Key Discussion Points, Action Points, Tasks, RAIDD Summary, Meetings, Decisions Needed, and Overall Summary.
+- For report-style answers, use short bullets or compact tables under each section, keep related facts grouped together, and write "Not available in context" for important missing report fields instead of inventing them.
 {project_rule}
 {knowledge_rule}
 - Do not use outside knowledge.
