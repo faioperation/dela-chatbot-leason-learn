@@ -194,6 +194,10 @@ Project ID: {project_id}
 RAIDD ID: {raidd_id}
 RAIDD Type: {json.dumps(raidd_parts["raidd"].get("type") or raidd_parts["analysis"], ensure_ascii=False)}
 RAIDD Status: {raidd_parts["raidd"].get("status")}
+Due Date: {raidd_parts["raidd"].get("dueDate") or raidd_parts["raidd"].get("decisionDueDate") or raidd_parts["raidd"].get("assumptionValidationDueDate")}
+Assumption Validation Due Date: {raidd_parts["raidd"].get("assumptionValidationDueDate")}
+Decision Due Date: {raidd_parts["raidd"].get("decisionDueDate")}
+Decision Owner: {raidd_parts["raidd"].get("decisionOwner")}
 AI Detection Title: {raidd_parts["title"]}
 RAIDD Description: {raidd_parts["description"]}
 AI Detection Summary: {raidd_parts["summary"]}
